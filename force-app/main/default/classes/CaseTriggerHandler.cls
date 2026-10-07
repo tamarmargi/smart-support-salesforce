@@ -22,4 +22,20 @@ public with sharing class CaseTriggerHandler {
             SLAService.setSLADeadlines(casesToRecalculate);
         }
     }
+
+    public static void afterInsert(List<Case> newCases) {
+        Set<Id> caseIds = new Set<Id>();
+
+        for (Case caseRecord : newCases) {
+            if (!caseRecord.AI_Processed__c) {
+                caseIds.add(caseRecord.Id);
+            }
+        }
+
+        if (!caseIds.isEmpty()) {
+            System.enqueueJob(
+                new CaseAIQueueable(caseIds)
+            );
+        }
+    }
 }

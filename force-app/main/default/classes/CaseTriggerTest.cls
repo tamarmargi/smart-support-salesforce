@@ -22,11 +22,18 @@ private class CaseTriggerTest {
     @isTest
     static void shouldSetDeadlineWhenCaseIsCreated() {
 
+        Test.setMock(
+            HttpCalloutMock.class,
+            new GeminiHttpMock()
+        );
+
         Case newCase = new Case(
             Subject = 'Test SLA',
+            Description = 'Customer cannot access the system.',
             Status = 'New',
             Origin = 'Web',
-            AI_Priority__c = 'High'
+            AI_Priority__c = 'High',
+            AI_Processed__c = true
         );
 
         Test.startTest();
@@ -54,11 +61,17 @@ private class CaseTriggerTest {
     @isTest
     static void shouldRecalculateDeadlineWhenPriorityChanges() {
 
+        Test.setMock(
+            HttpCalloutMock.class,
+            new GeminiHttpMock()
+        );
+
         Case newCase = new Case(
             Subject = 'Priority change test',
             Status = 'New',
             Origin = 'Web',
-            AI_Priority__c = 'High'
+            AI_Priority__c = 'High',
+            AI_Processed__c = true
         );
 
         insert newCase;
@@ -69,7 +82,8 @@ private class CaseTriggerTest {
             WHERE Id = :newCase.Id
         ];
 
-        Datetime highDeadline = beforeUpdate.SLA_Deadline__c;
+        Datetime highDeadline =
+            beforeUpdate.SLA_Deadline__c;
 
         Test.startTest();
 
@@ -98,6 +112,65 @@ private class CaseTriggerTest {
         System.assert(
             afterUpdate.SLA_Deadline__c < highDeadline,
             'Critical SLA should have an earlier deadline than High SLA'
+        );
+    }
+
+    @isTest
+    static void shouldAnalyzeCaseWithAI() {
+
+        Test.setMock(
+            HttpCalloutMock.class,
+            new GeminiHttpMock()
+        );
+
+        Case newCase = new Case(
+            Subject = 'Cannot access system',
+            Description = 'Customer cannot login to the system.',
+            Status = 'New',
+            Origin = 'Web',
+            AI_Processed__c = false
+        );
+
+        Test.startTest();
+
+        insert newCase;
+
+        Test.stopTest();
+
+        Case processedCase = [
+            SELECT AI_Category__c,
+                   AI_Priority__c,
+                   AI_Summary__c,
+                   AI_Processed__c,
+                   SLA_Deadline__c
+            FROM Case
+            WHERE Id = :newCase.Id
+        ];
+
+        System.assertEquals(
+            'Technical',
+            processedCase.AI_Category__c
+        );
+
+        System.assertEquals(
+            'Critical',
+            processedCase.AI_Priority__c
+        );
+
+        System.assertEquals(
+            'Customer cannot access the system.',
+            processedCase.AI_Summary__c
+        );
+
+        System.assertEquals(
+            true,
+            processedCase.AI_Processed__c
+        );
+
+        System.assertNotEquals(
+            null,
+            processedCase.SLA_Deadline__c,
+            'AI priority should trigger SLA calculation'
         );
     }
 }
